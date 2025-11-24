@@ -3,6 +3,14 @@ const ApiError = require('../utils/ApiError');
 const errorHandler = (err, req, res, next) => {
   let error = err;
 
+  // Log error for debugging
+  console.error('Error:', {
+    message: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    url: req.originalUrl,
+    method: req.method
+  });
+
   // Mongoose validation error
   if (err.name === 'ValidationError') {
     const errors = Object.values(err.errors).map(e => e.message);
@@ -12,12 +20,22 @@ const errorHandler = (err, req, res, next) => {
   // Mongoose duplicate key error
   if (err.code === 11000) {
     const field = Object.keys(err.keyPattern)[0];
-    error = new ApiError(409, `${field} already exists`);
+    const value = err.keyValue[field];
+    error = new ApiError(409, `${field} '${value}' already exists`);
   }
 
-  // Mongoose cast error
+  // Mongoose cast error (invalid ObjectId)
   if (err.name === 'CastError') {
     error = new ApiError(400, `Invalid ${err.path}: ${err.value}`);
+  }
+
+  // JWT errors
+  if (err.name === 'JsonWebTokenError') {
+    error = new ApiError(401, 'Invalid token');
+  }
+
+  if (err.name === 'TokenExpiredError') {
+    error = new ApiError(401, 'Token expired');
   }
 
   // Default to 500 server error
@@ -29,7 +47,8 @@ const errorHandler = (err, req, res, next) => {
     statusCode,
     message,
     errors: error.errors || [],
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    timestamp: new Date().toISOString()
   });
 };
 

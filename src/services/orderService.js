@@ -1,33 +1,142 @@
 const Order = require('../models/Order');
+const OrderItem = require('../models/OrderItem');
 const ApiError = require('../utils/ApiError');
+const mongoose = require('mongoose');
 
 class OrderService {
-  // Create single order
+  /**
+   * Create order with items using transaction
+   */
   async createOrder(orderData) {
-    const order = new Order(orderData);
-    await order.save();
-    return order;
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const { items, ...orderFields } = orderData;
+
+      // Create main order
+      const order = new Order({
+        ...orderFields,
+        itemCount: items.length
+      });
+      await order.save({ session });
+
+      // Create order items in bulk
+      const orderItems = items.map(item => ({
+        ...item,
+        orderCode: order.orderCode
+      }));
+
+      await OrderItem.insertMany(orderItems, { session });
+
+      await session.commitTransaction();
+      session.endSession();
+
+      return order;
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
   }
 
-  // Bulk create orders
+  /**
+   * Bulk create orders with items
+   */
   async bulkCreateOrders(ordersArray) {
-    return await Order.insertMany(ordersArray, { 
-      ordered: false,
-      lean: true 
-    });
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const orderDocs = [];
+      const itemDocs = [];
+
+      for (const orderData of ordersArray) {
+        const { items, ...orderFields } = orderData;
+        
+        orderDocs.push({
+          ...orderFields,
+          itemCount: items.length
+        });
+
+        items.forEach(item => {
+          itemDocs.push({
+            ...item,
+            orderCode: orderData.orderCode
+          });
+        });
+      }
+
+      const orders = await Order.insertMany(orderDocs, { session });
+      await OrderItem.insertMany(itemDocs, { session });
+
+      await session.commitTransaction();
+      session.endSession();
+
+      return orders;
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
   }
 
-  // Get order by orderCode
-  async getOrderByCode(orderCode) {
+  /**
+   * Get order by code with optional items
+   */
+  async getOrderByCode(orderCode, includeItems = true) {
     const order = await Order.findOne({ orderCode }).lean();
     if (!order) {
       throw new ApiError(404, 'Order not found');
     }
+
+    if (includeItems) {
+      const items = await OrderItem.find({ orderCode })
+        .select('-__v')
+        .lean();
+      order.items = items;
+    }
+
     return order;
   }
 
-  // Get all orders with pagination
-  async getAllOrders(page = 1, limit = 50, filters = {}) {
+  /**
+   * Get order items with pagination
+   */
+  async getOrderItems(orderCode, page = 1, limit = 50) {
+    const skip = (page - 1) * limit;
+
+    // Verify order exists
+    const orderExists = await Order.exists({ orderCode });
+    if (!orderExists) {
+      throw new ApiError(404, 'Order not found');
+    }
+
+    const [items, total] = await Promise.all([
+      OrderItem.find({ orderCode })
+        .sort({ createdAt: 1 })
+        .skip(skip)
+        .limit(limit)
+        .select('-__v')
+        .lean(),
+      OrderItem.countDocuments({ orderCode })
+    ]);
+
+    return {
+      items,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    };
+  }
+
+  /**
+   * Get all orders with pagination and filters
+   */
+  async getAllOrders(page = 1, limit = 50, filters = {}, includeItems = false) {
     const skip = (page - 1) * limit;
     
     const query = {};
@@ -42,9 +151,32 @@ class OrderService {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
+        .select('-__v')
         .lean(),
       Order.countDocuments(query)
     ]);
+
+    // Optionally fetch items for each order
+    if (includeItems && orders.length > 0) {
+      const orderCodes = orders.map(o => o.orderCode);
+      const items = await OrderItem.find({ 
+        orderCode: { $in: orderCodes } 
+      })
+      .select('-__v')
+      .lean();
+
+      // Group items by orderCode
+      const itemsByOrder = items.reduce((acc, item) => {
+        if (!acc[item.orderCode]) acc[item.orderCode] = [];
+        acc[item.orderCode].push(item);
+        return acc;
+      }, {});
+
+      // Attach items to orders
+      orders.forEach(order => {
+        order.items = itemsByOrder[order.orderCode] || [];
+      });
+    }
 
     return {
       orders,
@@ -57,22 +189,86 @@ class OrderService {
     };
   }
 
-  // Get orders by partner
+  /**
+   * Get orders by partner
+   */
   async getOrdersByPartner(partnerCode, page = 1, limit = 50) {
     return this.getAllOrders(page, limit, { partnerCode });
   }
 
-  // Get orders by SKU
-  async getOrdersBySku(channelSkuCode) {
-    return await Order.find({ 
-      'items.channelSkuCode': channelSkuCode 
+  /**
+   * Get orders by SKU
+   */
+  async getOrdersBySku(channelSkuCode, page = 1, limit = 50) {
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      OrderItem.find({ channelSkuCode })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select('-__v')
+        .lean(),
+      OrderItem.countDocuments({ channelSkuCode })
+    ]);
+
+    // Get unique order codes
+    const orderCodes = [...new Set(items.map(item => item.orderCode))];
+
+    // Fetch order details
+    const orders = await Order.find({ 
+      orderCode: { $in: orderCodes } 
     })
-    .select('orderCode partnerCode items createdAt')
+    .select('-__v')
     .lean();
+
+    // Map orders to items
+    const orderMap = orders.reduce((acc, order) => {
+      acc[order.orderCode] = order;
+      return acc;
+    }, {});
+
+    const result = items.map(item => ({
+      ...item,
+      orderDetails: orderMap[item.orderCode]
+    }));
+
+    return {
+      items: result,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    };
   }
 
-  // Update order
+  /**
+   * Update single order item
+   */
+  async updateOrderItem(orderCode, orderItemCode, updateData) {
+    const item = await OrderItem.findOneAndUpdate(
+      { orderCode, orderItemCode },
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
+
+    if (!item) {
+      throw new ApiError(404, 'Order item not found');
+    }
+
+    return item;
+  }
+
+  /**
+   * Update order (without items)
+   */
   async updateOrder(orderCode, updateData) {
+    // Remove items if accidentally passed
+    delete updateData.items;
+    delete updateData.itemCount;
+
     const order = await Order.findOneAndUpdate(
       { orderCode },
       { $set: updateData },
@@ -86,14 +282,18 @@ class OrderService {
     return order;
   }
 
-  // Update order status
+  /**
+   * Update order status
+   */
   async updateOrderStatus(orderCode, status) {
     return this.updateOrder(orderCode, {
       'orderCustomAttributes.channelMetadata.status': status
     });
   }
 
-  // Bulk update status
+  /**
+   * Bulk update order status
+   */
   async bulkUpdateStatus(orderCodes, newStatus) {
     const result = await Order.updateMany(
       { orderCode: { $in: orderCodes } },
@@ -105,32 +305,170 @@ class OrderService {
       }
     );
 
-    return result;
+    return {
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount
+    };
   }
 
-  // Delete order
+  /**
+   * Delete order with items using transaction
+   */
   async deleteOrder(orderCode) {
-    const order = await Order.findOneAndDelete({ orderCode });
-    if (!order) {
-      throw new ApiError(404, 'Order not found');
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const order = await Order.findOneAndDelete({ orderCode }, { session });
+      if (!order) {
+        throw new ApiError(404, 'Order not found');
+      }
+
+      // Delete all associated items
+      const deleteResult = await OrderItem.deleteMany({ orderCode }, { session });
+
+      await session.commitTransaction();
+      session.endSession();
+
+      return {
+        order,
+        deletedItemsCount: deleteResult.deletedCount
+      };
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
     }
-    return order;
   }
 
-  // Get order statistics
+  /**
+   * Get order statistics
+   */
   async getOrderStats(partnerCode) {
+    const matchStage = partnerCode ? { partnerCode } : {};
+
     const stats = await Order.aggregate([
-      ...(partnerCode ? [{ $match: { partnerCode } }] : []),
+      { $match: matchStage },
       {
         $group: {
           _id: '$orderCustomAttributes.channelMetadata.status',
           count: { $sum: 1 },
-          totalItems: { $sum: { $size: '$items' } }
+          totalItems: { $sum: '$itemCount' }
+        }
+      },
+      {
+        $sort: { count: -1 }
+      }
+    ]);
+
+    // Get item-level stats
+    const itemStatsQuery = partnerCode ? [
+      {
+        $lookup: {
+          from: 'orders',
+          localField: 'orderCode',
+          foreignField: 'orderCode',
+          as: 'order'
+        }
+      },
+      { $unwind: '$order' },
+      { $match: { 'order.partnerCode': partnerCode } }
+    ] : [];
+
+    const itemStats = await OrderItem.aggregate([
+      ...itemStatsQuery,
+      {
+        $group: {
+          _id: null,
+          totalQcPass: { $sum: '$qcPassAbsoluteQuantity' },
+          totalQcFail: { $sum: '$qcFailAbsoluteQuantity' },
+          totalItems: { $sum: 1 }
         }
       }
     ]);
 
-    return stats;
+    return {
+      orderStats: stats,
+      itemStats: itemStats[0] || {
+        totalQcPass: 0,
+        totalQcFail: 0,
+        totalItems: 0
+      }
+    };
+  }
+
+  /**
+   * Add item to existing order
+   */
+  async addItemToOrder(orderCode, itemData) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      // Verify order exists
+      const order = await Order.findOne({ orderCode }).session(session);
+      if (!order) {
+        throw new ApiError(404, 'Order not found');
+      }
+
+      // Create new item
+      const newItem = new OrderItem({
+        ...itemData,
+        orderCode
+      });
+      await newItem.save({ session });
+
+      // Update item count
+      await Order.updateOne(
+        { orderCode },
+        { $inc: { itemCount: 1 } },
+        { session }
+      );
+
+      await session.commitTransaction();
+      session.endSession();
+
+      return newItem;
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
+  }
+
+  /**
+   * Delete item from order
+   */
+  async deleteOrderItem(orderCode, orderItemCode) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const item = await OrderItem.findOneAndDelete(
+        { orderCode, orderItemCode },
+        { session }
+      );
+
+      if (!item) {
+        throw new ApiError(404, 'Order item not found');
+      }
+
+      // Update item count
+      await Order.updateOne(
+        { orderCode },
+        { $inc: { itemCount: -1 } },
+        { session }
+      );
+
+      await session.commitTransaction();
+      session.endSession();
+
+      return item;
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
   }
 }
 
