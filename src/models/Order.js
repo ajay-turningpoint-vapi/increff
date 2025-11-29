@@ -54,7 +54,8 @@ const orderSchema = new Schema({
   messageId: { 
     type: Number, 
     required: [true, 'Message ID is required'],
-    index: true 
+    index: true,
+    unique: true
   },
   parentOrderCode: { 
     type: String, 

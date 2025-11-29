@@ -62,7 +62,7 @@ exports.getAllOrders = asyncHandler(async (req, res) => {
     partnerCode, 
     locationCode, 
     status,
-    includeItems = 'false'
+    includeItems = 'true'
   } = req.query;
   
   const filters = {};

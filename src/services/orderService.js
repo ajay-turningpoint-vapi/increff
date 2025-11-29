@@ -1,7 +1,7 @@
-const Order = require('../models/Order');
-const OrderItem = require('../models/OrderItem');
-const ApiError = require('../utils/ApiError');
-const mongoose = require('mongoose');
+const Order = require("../models/Order");
+const OrderItem = require("../models/OrderItem");
+const ApiError = require("../utils/ApiError");
+const mongoose = require("mongoose");
 
 class OrderService {
   /**
@@ -17,14 +17,14 @@ class OrderService {
       // Create main order
       const order = new Order({
         ...orderFields,
-        itemCount: items.length
+        itemCount: items.length,
       });
       await order.save({ session });
 
       // Create order items in bulk
-      const orderItems = items.map(item => ({
+      const orderItems = items.map((item) => ({
         ...item,
-        orderCode: order.orderCode
+        orderCode: order.orderCode,
       }));
 
       await OrderItem.insertMany(orderItems, { session });
@@ -53,16 +53,16 @@ class OrderService {
 
       for (const orderData of ordersArray) {
         const { items, ...orderFields } = orderData;
-        
+
         orderDocs.push({
           ...orderFields,
-          itemCount: items.length
+          itemCount: items.length,
         });
 
-        items.forEach(item => {
+        items.forEach((item) => {
           itemDocs.push({
             ...item,
-            orderCode: orderData.orderCode
+            orderCode: orderData.orderCode,
           });
         });
       }
@@ -85,14 +85,16 @@ class OrderService {
    * Get order by code with optional items
    */
   async getOrderByCode(orderCode, includeItems = true) {
-    const order = await Order.findOne({ orderCode }).lean();
+    const order = await Order.findOne({ orderCode })
+      .select("-_id -itemCount -__v")
+      .lean();
     if (!order) {
-      throw new ApiError(404, 'Order not found');
+      throw new ApiError(404, "Order not found");
     }
 
     if (includeItems) {
       const items = await OrderItem.find({ orderCode })
-        .select('-__v')
+        .select("-_id -__v -createdAt -updatedAt")
         .lean();
       order.items = items;
     }
@@ -109,7 +111,7 @@ class OrderService {
     // Verify order exists
     const orderExists = await Order.exists({ orderCode });
     if (!orderExists) {
-      throw new ApiError(404, 'Order not found');
+      throw new ApiError(404, "Order not found");
     }
 
     const [items, total] = await Promise.all([
@@ -117,9 +119,9 @@ class OrderService {
         .sort({ createdAt: 1 })
         .skip(skip)
         .limit(limit)
-        .select('-__v')
+        .select("-_id -__v -createdAt -updatedAt")
         .lean(),
-      OrderItem.countDocuments({ orderCode })
+      OrderItem.countDocuments({ orderCode }),
     ]);
 
     return {
@@ -128,8 +130,8 @@ class OrderService {
         page,
         limit,
         total,
-        pages: Math.ceil(total / limit)
-      }
+        pages: Math.ceil(total / limit),
+      },
     };
   }
 
@@ -138,12 +140,12 @@ class OrderService {
    */
   async getAllOrders(page = 1, limit = 50, filters = {}, includeItems = false) {
     const skip = (page - 1) * limit;
-    
+
     const query = {};
     if (filters.partnerCode) query.partnerCode = filters.partnerCode;
     if (filters.locationCode) query.locationCode = filters.locationCode;
     if (filters.status) {
-      query['orderCustomAttributes.channelMetadata.status'] = filters.status;
+      query["orderCustomAttributes.channelMetadata.status"] = filters.status;
     }
 
     const [orders, total] = await Promise.all([
@@ -151,19 +153,19 @@ class OrderService {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .select('-__v')
+        .select("-_id -itemCount -__v")
         .lean(),
-      Order.countDocuments(query)
+      Order.countDocuments(query),
     ]);
 
     // Optionally fetch items for each order
     if (includeItems && orders.length > 0) {
-      const orderCodes = orders.map(o => o.orderCode);
-      const items = await OrderItem.find({ 
-        orderCode: { $in: orderCodes } 
+      const orderCodes = orders.map((o) => o.orderCode);
+      const items = await OrderItem.find({
+        orderCode: { $in: orderCodes },
       })
-      .select('-__v')
-      .lean();
+        .select("-_id -__v -createdAt -updatedAt")
+        .lean();
 
       // Group items by orderCode
       const itemsByOrder = items.reduce((acc, item) => {
@@ -173,7 +175,7 @@ class OrderService {
       }, {});
 
       // Attach items to orders
-      orders.forEach(order => {
+      orders.forEach((order) => {
         order.items = itemsByOrder[order.orderCode] || [];
       });
     }
@@ -184,8 +186,8 @@ class OrderService {
         page,
         limit,
         total,
-        pages: Math.ceil(total / limit)
-      }
+        pages: Math.ceil(total / limit),
+      },
     };
   }
 
@@ -207,20 +209,20 @@ class OrderService {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .select('-__v')
+        .select("-__v")
         .lean(),
-      OrderItem.countDocuments({ channelSkuCode })
+      OrderItem.countDocuments({ channelSkuCode }),
     ]);
 
     // Get unique order codes
-    const orderCodes = [...new Set(items.map(item => item.orderCode))];
+    const orderCodes = [...new Set(items.map((item) => item.orderCode))];
 
     // Fetch order details
-    const orders = await Order.find({ 
-      orderCode: { $in: orderCodes } 
+    const orders = await Order.find({
+      orderCode: { $in: orderCodes },
     })
-    .select('-__v')
-    .lean();
+      .select("-__v")
+      .lean();
 
     // Map orders to items
     const orderMap = orders.reduce((acc, order) => {
@@ -228,9 +230,9 @@ class OrderService {
       return acc;
     }, {});
 
-    const result = items.map(item => ({
+    const result = items.map((item) => ({
       ...item,
-      orderDetails: orderMap[item.orderCode]
+      orderDetails: orderMap[item.orderCode],
     }));
 
     return {
@@ -239,8 +241,8 @@ class OrderService {
         page,
         limit,
         total,
-        pages: Math.ceil(total / limit)
-      }
+        pages: Math.ceil(total / limit),
+      },
     };
   }
 
@@ -255,7 +257,7 @@ class OrderService {
     );
 
     if (!item) {
-      throw new ApiError(404, 'Order item not found');
+      throw new ApiError(404, "Order item not found");
     }
 
     return item;
@@ -276,7 +278,7 @@ class OrderService {
     );
 
     if (!order) {
-      throw new ApiError(404, 'Order not found');
+      throw new ApiError(404, "Order not found");
     }
 
     return order;
@@ -287,7 +289,7 @@ class OrderService {
    */
   async updateOrderStatus(orderCode, status) {
     return this.updateOrder(orderCode, {
-      'orderCustomAttributes.channelMetadata.status': status
+      "orderCustomAttributes.channelMetadata.status": status,
     });
   }
 
@@ -297,17 +299,17 @@ class OrderService {
   async bulkUpdateStatus(orderCodes, newStatus) {
     const result = await Order.updateMany(
       { orderCode: { $in: orderCodes } },
-      { 
-        $set: { 
-          'orderCustomAttributes.channelMetadata.status': newStatus,
-          updatedAt: new Date()
-        } 
+      {
+        $set: {
+          "orderCustomAttributes.channelMetadata.status": newStatus,
+          updatedAt: new Date(),
+        },
       }
     );
 
     return {
       matchedCount: result.matchedCount,
-      modifiedCount: result.modifiedCount
+      modifiedCount: result.modifiedCount,
     };
   }
 
@@ -321,18 +323,21 @@ class OrderService {
     try {
       const order = await Order.findOneAndDelete({ orderCode }, { session });
       if (!order) {
-        throw new ApiError(404, 'Order not found');
+        throw new ApiError(404, "Order not found");
       }
 
       // Delete all associated items
-      const deleteResult = await OrderItem.deleteMany({ orderCode }, { session });
+      const deleteResult = await OrderItem.deleteMany(
+        { orderCode },
+        { session }
+      );
 
       await session.commitTransaction();
       session.endSession();
 
       return {
         order,
-        deletedItemsCount: deleteResult.deletedCount
+        deletedItemsCount: deleteResult.deletedCount,
       };
     } catch (error) {
       await session.abortTransaction();
@@ -351,40 +356,42 @@ class OrderService {
       { $match: matchStage },
       {
         $group: {
-          _id: '$orderCustomAttributes.channelMetadata.status',
+          _id: "$orderCustomAttributes.channelMetadata.status",
           count: { $sum: 1 },
-          totalItems: { $sum: '$itemCount' }
-        }
+          totalItems: { $sum: "$itemCount" },
+        },
       },
       {
-        $sort: { count: -1 }
-      }
+        $sort: { count: -1 },
+      },
     ]);
 
     // Get item-level stats
-    const itemStatsQuery = partnerCode ? [
-      {
-        $lookup: {
-          from: 'orders',
-          localField: 'orderCode',
-          foreignField: 'orderCode',
-          as: 'order'
-        }
-      },
-      { $unwind: '$order' },
-      { $match: { 'order.partnerCode': partnerCode } }
-    ] : [];
+    const itemStatsQuery = partnerCode
+      ? [
+          {
+            $lookup: {
+              from: "orders",
+              localField: "orderCode",
+              foreignField: "orderCode",
+              as: "order",
+            },
+          },
+          { $unwind: "$order" },
+          { $match: { "order.partnerCode": partnerCode } },
+        ]
+      : [];
 
     const itemStats = await OrderItem.aggregate([
       ...itemStatsQuery,
       {
         $group: {
           _id: null,
-          totalQcPass: { $sum: '$qcPassAbsoluteQuantity' },
-          totalQcFail: { $sum: '$qcFailAbsoluteQuantity' },
-          totalItems: { $sum: 1 }
-        }
-      }
+          totalQcPass: { $sum: "$qcPassAbsoluteQuantity" },
+          totalQcFail: { $sum: "$qcFailAbsoluteQuantity" },
+          totalItems: { $sum: 1 },
+        },
+      },
     ]);
 
     return {
@@ -392,8 +399,8 @@ class OrderService {
       itemStats: itemStats[0] || {
         totalQcPass: 0,
         totalQcFail: 0,
-        totalItems: 0
-      }
+        totalItems: 0,
+      },
     };
   }
 
@@ -408,13 +415,13 @@ class OrderService {
       // Verify order exists
       const order = await Order.findOne({ orderCode }).session(session);
       if (!order) {
-        throw new ApiError(404, 'Order not found');
+        throw new ApiError(404, "Order not found");
       }
 
       // Create new item
       const newItem = new OrderItem({
         ...itemData,
-        orderCode
+        orderCode,
       });
       await newItem.save({ session });
 
@@ -450,7 +457,7 @@ class OrderService {
       );
 
       if (!item) {
-        throw new ApiError(404, 'Order item not found');
+        throw new ApiError(404, "Order item not found");
       }
 
       // Update item count
