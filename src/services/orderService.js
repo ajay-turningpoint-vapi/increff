@@ -9,38 +9,90 @@ class OrderService {
   /**
    * Create order with items using transaction
    */
+  // async createOrder(orderData) {
+  //   const session = await mongoose.startSession();
+  //   session.startTransaction();
+
+  //   try {
+  //     const { items, ...orderFields } = orderData;
+
+  //      const existing = await Order.findOne({ messageId: orderFields.messageId }).session(session);
+  //   if (existing) {
+  //     throw new Error("Order with this messageId already exists");
+  //   }
+
+  //     // Create main order
+  //     const order = new Order({
+  //       ...orderFields,
+  //       itemCount: items.length,
+  //     });
+  //     await order.save({ session });
+
+  //     // Create order items in bulk
+  //     const orderItems = items.map((item) => ({
+  //       ...item,
+  //       orderCode: order.orderCode,
+  //     }));
+
+  //     await OrderItem.insertMany(orderItems, { session });
+
+  //     await session.commitTransaction();
+  //     session.endSession();
+
+  //     return order;
+  //   } catch (error) {
+  //     await session.abortTransaction();
+  //     session.endSession();
+  //     throw error;
+  //   }
+  // }
+
   async createOrder(orderData) {
-    const session = await mongoose.startSession();
-    session.startTransaction();
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-    try {
-      const { items, ...orderFields } = orderData;
+  try {
+    const { items, ...orderFields } = orderData;
 
-      // Create main order
-      const order = new Order({
-        ...orderFields,
-        itemCount: items.length,
-      });
-      await order.save({ session });
-
-      // Create order items in bulk
-      const orderItems = items.map((item) => ({
-        ...item,
-        orderCode: order.orderCode,
-      }));
-
-      await OrderItem.insertMany(orderItems, { session });
-
-      await session.commitTransaction();
-      session.endSession();
-
-      return order;
-    } catch (error) {
-      await session.abortTransaction();
-      session.endSession();
-      throw error;
+    // Check if order with same messageId already exists
+    const existing = await Order.findOne({ messageId: orderFields.messageId }).session(session);
+    if (existing) {
+      throw new Error("Order with this messageId already exists");
     }
+
+    const order = new Order({
+      ...orderFields,
+      itemCount: items.length,
+    });
+
+    await order.save({ session });
+
+    const orderItems = items.map((item) => ({
+      ...item,
+      orderCode: order.orderCode,
+    }));
+
+    await OrderItem.insertMany(orderItems, { session });
+
+    await session.commitTransaction();
+    return order;
+
+  } catch (error) {
+
+    await session.abortTransaction();
+
+    // Duplicate index conflict
+    if (error.code === 11000) {
+      throw new Error("Duplicate messageId: Order already exists");
+    }
+
+    throw error;
+
+  } finally {
+    session.endSession();
   }
+}
+
 
   /**
    * Bulk create orders with items
@@ -103,8 +155,6 @@ class OrderService {
 
     return order;
   }
-
-
 
     /**
    * Get order by date with optional items
