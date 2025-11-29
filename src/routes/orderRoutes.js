@@ -19,6 +19,8 @@ router.get('/', validatePagination, orderController.getAllOrders);
 // Read routes - Single order
 router.get('/:orderCode', orderController.getOrder);
 router.get('/:orderCode/items', validatePagination, orderController.getOrderItems);
+router.get('/date/:date', orderController.getOrderByDate);
+
 
 // Read routes - Partner orders
 router.get('/partner/:partnerCode', validatePagination, orderController.getOrdersByPartner);

@@ -1,5 +1,7 @@
 const Order = require("../models/Order");
 const OrderItem = require("../models/OrderItem");
+const moment = require("moment-timezone");
+
 const ApiError = require("../utils/ApiError");
 const mongoose = require("mongoose");
 
@@ -100,6 +102,58 @@ class OrderService {
     }
 
     return order;
+  }
+
+
+
+    /**
+   * Get order by date with optional items
+   */
+  async getOrderByDate(dateString, includeItems = true) {
+    // Convert YYYY/MM/DD → IST start & end of day
+    const startOfDay = moment
+      .tz(dateString, "YYYY/MM/DD", "Asia/Kolkata")
+      .startOf("day")
+      .toDate();
+
+    const endOfDay = moment
+      .tz(dateString, "YYYY/MM/DD", "Asia/Kolkata")
+      .endOf("day")
+      .toDate();
+
+    const dateFilter = {
+      createdAt: { $gte: startOfDay, $lte: endOfDay },
+    };
+
+    // Fetch all orders created on that date
+    const orders = await Order.find(dateFilter)
+      .select("-_id -itemCount -__v")
+      .lean();
+
+    if (!orders.length) {
+      throw new ApiError(404, "No orders found for the given date");
+    }
+
+    if (includeItems) {
+      // Fetch items created on that date
+      const items = await OrderItem.find(dateFilter)
+        .select("-_id -__v -createdAt -updatedAt")
+        .lean();
+
+      // Attach items to their parent orderCode
+      const itemsGrouped = items.reduce((acc, item) => {
+        acc[item.orderCode] = acc[item.orderCode] || [];
+        acc[item.orderCode].push(item);
+        return acc;
+      }, {});
+
+      // Merge items into orders
+      orders.forEach((order) => {
+        order.items = itemsGrouped[order.orderCode] || [];
+      });
+    }
+
+    return orders;
   }
 
   /**
