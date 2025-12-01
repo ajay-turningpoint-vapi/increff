@@ -1,25 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const orderController = require('../controllers/orderController');
-const { validateOrderRequest } = require('../middlewares/validateRequest');
 
-// Create routes
-router.post('/', validateOrderRequest, orderController.createOrder);
-router.post('/bulk', orderController.bulkCreateOrders);
+// Create order with orderItems + gateEntryLevelBoxSkuDetails
+router.post('/', orderController.createOrder);
 
-// Read routes
-router.get('/', orderController.getAllOrders);
-router.get('/stats', orderController.getOrderStats);
+// Get order (optionally with items)
 router.get('/:orderCode', orderController.getOrder);
-router.get('/partner/:partnerCode', orderController.getOrdersByPartner);
-router.get('/sku/:skuCode', orderController.getOrdersBySku);
 
-// Update routes
-router.put('/:orderCode', orderController.updateOrder);
-router.patch('/:orderCode/status', orderController.updateOrderStatus);
-router.patch('/bulk/status', orderController.bulkUpdateStatus);
+// Paginated items
+router.get('/:orderCode/items', orderController.getOrderItems);
 
-// Delete routes
-router.delete('/:orderCode', orderController.deleteOrder);
+// GET /api/v1/orders
+router.get('/', orderController.getAllOrders);
+
 
 module.exports = router;
