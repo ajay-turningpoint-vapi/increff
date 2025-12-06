@@ -40,15 +40,37 @@ exports.bulkCreateOrders = asyncHandler(async (req, res) => {
 
 // Get order by code
 exports.getOrder = asyncHandler(async (req, res) => {
-  const { includeItems = "true" } = req.query;
+  const { orderCode,includeItems = "true" } = req.query;
   const order = await orderService.getOrderByCode(
-    req.params.orderCode,
+   orderCode,
     includeItems === "true"
   );
   res
     .status(200)
     .json(new ApiResponse(200, order, "Order retrieved successfully"));
 });
+
+exports.getOrderByQuery = asyncHandler(async (req, res) => {
+  const { orderCode, includeItems = "true" } = req.query;
+  console.log("query",req.query);
+  
+
+  if (!orderCode) {
+    return res
+      .status(400)
+      .json({ message: "orderCode is required in query params" });
+  }
+
+  const order = await orderService.getOrderByCode(
+    orderCode,
+    includeItems === "true"
+  );
+
+  res
+    .status(200)
+    .json(new ApiResponse(200, order, "Order retrieved successfully"));
+});
+
 
 // Get order by date
 exports.getOrderByDate = asyncHandler(async (req, res) => {

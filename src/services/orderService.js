@@ -139,6 +139,9 @@ class OrderService {
    * Get order by code with optional items
    */
   async getOrderByCode(orderCode, includeItems = true) {
+console.log("orderCode",orderCode);
+
+
     const order = await Order.findOne({ orderCode })
       .select("-_id -itemCount -__v")
       .lean();

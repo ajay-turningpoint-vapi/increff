@@ -17,7 +17,9 @@ router.get('/sku/:skuCode', validatePagination, orderController.getOrdersBySku);
 router.get('/', validatePagination, orderController.getAllOrders);
 
 // Read routes - Single order
+
 router.get('/:orderCode', orderController.getOrder);
+router.get('/params', orderController.getOrderByQuery);
 router.get('/:orderCode/items', validatePagination, orderController.getOrderItems);
 router.get('/date/:date', orderController.getOrderByDate);
 
