@@ -6,58 +6,67 @@ const ApiError = require("../utils/ApiError");
 const mongoose = require("mongoose");
 
 class OrderService {
-  /**
-   * Create order with items using transaction
-   */
-  // async createOrder(orderData) {
-  //   const session = await mongoose.startSession();
-  //   session.startTransaction();
+//   async createOrder(orderData) {
+//   const session = await mongoose.startSession();
+//   session.startTransaction();
 
-  //   try {
-  //     const { items, ...orderFields } = orderData;
+//   try {
+//     const { items, ...orderFields } = orderData;
 
-  //      const existing = await Order.findOne({ messageId: orderFields.messageId }).session(session);
-  //   if (existing) {
-  //     throw new Error("Order with this messageId already exists");
-  //   }
+//     // Check if order with same messageId already exists
+//     const existing = await Order.findOne({ messageId: orderFields.messageId }).session(session);
+//     if (existing) {
+//       throw new Error("Order with this messageId already exists");
+//     }
 
-  //     // Create main order
-  //     const order = new Order({
-  //       ...orderFields,
-  //       itemCount: items.length,
-  //     });
-  //     await order.save({ session });
+//     const order = new Order({
+//       ...orderFields,
+//       itemCount: items.length,
+//     });
 
-  //     // Create order items in bulk
-  //     const orderItems = items.map((item) => ({
-  //       ...item,
-  //       orderCode: order.orderCode,
-  //     }));
+//     await order.save({ session });
 
-  //     await OrderItem.insertMany(orderItems, { session });
+//     const orderItems = items.map((item) => ({
+//       ...item,
+//       orderCode: order.orderCode,
+//     }));
 
-  //     await session.commitTransaction();
-  //     session.endSession();
+//     await OrderItem.insertMany(orderItems, { session });
 
-  //     return order;
-  //   } catch (error) {
-  //     await session.abortTransaction();
-  //     session.endSession();
-  //     throw error;
-  //   }
-  // }
+//     await session.commitTransaction();
+//     return order;
 
-  async createOrder(orderData) {
+//   } catch (error) {
+
+//     await session.abortTransaction();
+
+//     // Duplicate index conflict
+//     if (error.code === 11000) {
+//       throw new Error("Duplicate messageId: Order already exists");
+//     }
+
+//     throw error;
+
+//   } finally {
+//     session.endSession();
+//   }
+// }
+
+
+async createOrder(orderData) {
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
     const { items, ...orderFields } = orderData;
 
-    // Check if order with same messageId already exists
-    const existing = await Order.findOne({ messageId: orderFields.messageId }).session(session);
+    // Idempotency check
+    const existing = await Order
+      .findOne({ orderCode: orderFields.orderCode })
+      .session(session);
+
     if (existing) {
-      throw new Error("Order with this messageId already exists");
+      return existing;
     }
 
     const order = new Order({
@@ -78,12 +87,11 @@ class OrderService {
     return order;
 
   } catch (error) {
-
     await session.abortTransaction();
 
-    // Duplicate index conflict
-    if (error.code === 11000) {
-      throw new Error("Duplicate messageId: Order already exists");
+    // Duplicate protection (race condition safe)
+    if (error.code === 11000 && error.keyPattern?.orderCode) {
+      return await Order.findOne({ orderCode: orderData.orderCode });
     }
 
     throw error;
