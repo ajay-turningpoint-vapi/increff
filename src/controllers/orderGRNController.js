@@ -1,4 +1,4 @@
-const orderService = require("../services/orderService");
+const orderService = require("../services/orderGRNService");
 const ApiResponse = require("../utils/ApiResponse");
 const asyncHandler = require("../middlewares/asyncHandler");
 const moment = require('moment-timezone');

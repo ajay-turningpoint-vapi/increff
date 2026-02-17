@@ -41,9 +41,12 @@ app.get('/health', (req, res) => {
 });
 
 // API routes
-app.use('/api/v1/orders', require('./routes/orderRoutes'));
+app.use('/api/v1/grn-orders', require('./routes/orderGRNRoutes'));
 app.use('/api/v1/invoices', require('./routes/invoiceRoutes'));
 app.use('/api/v1/outwards', require('./routes/outwardOrderRoutes'));
+app.use('/api/v1/jobs', require('./routes/jobRoutes'));
+app.use('/api/v1/skus', require('./routes/skuRoutes'));
+
 
 
 // 404 handler

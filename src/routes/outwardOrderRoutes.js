@@ -4,7 +4,7 @@ const outwardOrderController = require('../controllers/outwardOrderController');
 const validateOutwardOrder = require('../middlewares/validateOutwardOrder');
 
 // Create outward order
-router.post('/partner-code', validateOutwardOrder, outwardOrderController.createOrder);
+router.post('/', validateOutwardOrder, outwardOrderController.createOrder);
 
 // Get a single outward order (optionally with items)
 router.get('/:orderCode', outwardOrderController.getOrder);

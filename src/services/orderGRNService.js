@@ -1,5 +1,5 @@
-const Order = require("../models/Order");
-const OrderItem = require("../models/OrderItem");
+const Order = require("../models/GRNOrder");
+const OrderItem = require("../models/GRNOrderItem");
 const moment = require("moment-timezone");
 
 const ApiError = require("../utils/ApiError");
