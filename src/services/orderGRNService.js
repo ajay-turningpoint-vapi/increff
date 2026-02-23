@@ -4,103 +4,107 @@ const moment = require("moment-timezone");
 
 const ApiError = require("../utils/ApiError");
 const mongoose = require("mongoose");
+const { emitSyncEventBusy } = require("../utils/emitSyncEventBusy");
+
 
 class OrderService {
-//   async createOrder(orderData) {
-//   const session = await mongoose.startSession();
-//   session.startTransaction();
+  //   async createOrder(orderData) {
+  //   const session = await mongoose.startSession();
+  //   session.startTransaction();
 
-//   try {
-//     const { items, ...orderFields } = orderData;
+  //   try {
+  //     const { items, ...orderFields } = orderData;
 
-//     // Check if order with same messageId already exists
-//     const existing = await Order.findOne({ messageId: orderFields.messageId }).session(session);
-//     if (existing) {
-//       throw new Error("Order with this messageId already exists");
-//     }
+  //     // Check if order with same messageId already exists
+  //     const existing = await Order.findOne({ messageId: orderFields.messageId }).session(session);
+  //     if (existing) {
+  //       throw new Error("Order with this messageId already exists");
+  //     }
 
-//     const order = new Order({
-//       ...orderFields,
-//       itemCount: items.length,
-//     });
+  //     const order = new Order({
+  //       ...orderFields,
+  //       itemCount: items.length,
+  //     });
 
-//     await order.save({ session });
+  //     await order.save({ session });
 
-//     const orderItems = items.map((item) => ({
-//       ...item,
-//       orderCode: order.orderCode,
-//     }));
+  //     const orderItems = items.map((item) => ({
+  //       ...item,
+  //       orderCode: order.orderCode,
+  //     }));
 
-//     await OrderItem.insertMany(orderItems, { session });
+  //     await OrderItem.insertMany(orderItems, { session });
 
-//     await session.commitTransaction();
-//     return order;
+  //     await session.commitTransaction();
+  //     return order;
 
-//   } catch (error) {
+  //   } catch (error) {
 
-//     await session.abortTransaction();
+  //     await session.abortTransaction();
 
-//     // Duplicate index conflict
-//     if (error.code === 11000) {
-//       throw new Error("Duplicate messageId: Order already exists");
-//     }
+  //     // Duplicate index conflict
+  //     if (error.code === 11000) {
+  //       throw new Error("Duplicate messageId: Order already exists");
+  //     }
 
-//     throw error;
+  //     throw error;
 
-//   } finally {
-//     session.endSession();
-//   }
-// }
+  //   } finally {
+  //     session.endSession();
+  //   }
+  // }
 
+  async createOrder(orderData) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-async createOrder(orderData) {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+    try {
+      const { items, ...orderFields } = orderData;
 
-  try {
-    const { items, ...orderFields } = orderData;
+      // Idempotency check
+      const existing = await Order.findOne({
+        orderCode: orderFields.orderCode,
+      }).session(session);
 
-    // Idempotency check
-    const existing = await Order
-      .findOne({ orderCode: orderFields.orderCode })
-      .session(session);
+      if (existing) {
+        return existing;
+      }
 
-    if (existing) {
-      return existing;
+      const order = new Order({
+        ...orderFields,
+        itemCount: items.length,
+      });
+
+      await order.save({ session });
+
+      const orderItems = items.map((item) => ({
+        ...item,
+        orderCode: order.orderCode,
+      }));
+
+      await OrderItem.insertMany(orderItems, { session });
+
+      await session.commitTransaction();
+
+      await emitSyncEventBusy("ORDER_CREATED", {
+        order,
+        items: orderItems,
+      });
+
+      return order;
+    } catch (error) {
+      await session.abortTransaction();
+
+      // Duplicate protection (race condition safe)
+      if (error.code === 11000 && error.keyPattern?.orderCode) {
+        return await Order.findOne({ orderCode: orderData.orderCode });
+      }
+
+      throw error;
+    } finally {
+      session.endSession();
     }
-
-    const order = new Order({
-      ...orderFields,
-      itemCount: items.length,
-    });
-
-    await order.save({ session });
-
-    const orderItems = items.map((item) => ({
-      ...item,
-      orderCode: order.orderCode,
-    }));
-
-    await OrderItem.insertMany(orderItems, { session });
-
-    await session.commitTransaction();
-    return order;
-
-  } catch (error) {
-    await session.abortTransaction();
-
-    // Duplicate protection (race condition safe)
-    if (error.code === 11000 && error.keyPattern?.orderCode) {
-      return await Order.findOne({ orderCode: orderData.orderCode });
-    }
-
-    throw error;
-
-  } finally {
-    session.endSession();
   }
-}
-
 
   /**
    * Bulk create orders with items
@@ -147,8 +151,7 @@ async createOrder(orderData) {
    * Get order by code with optional items
    */
   async getOrderByCode(orderCode, includeItems = true) {
-console.log("orderCode",orderCode);
-
+    console.log("orderCode", orderCode);
 
     const order = await Order.findOne({ orderCode })
       .select("-_id -itemCount -__v")
@@ -167,7 +170,7 @@ console.log("orderCode",orderCode);
     return order;
   }
 
-    /**
+  /**
    * Get order by date with optional items
    */
   async getOrderByDate(dateString, includeItems = true) {
@@ -368,7 +371,7 @@ console.log("orderCode",orderCode);
     const item = await OrderItem.findOneAndUpdate(
       { orderCode, orderItemCode },
       { $set: updateData },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
 
     if (!item) {
@@ -389,7 +392,7 @@ console.log("orderCode",orderCode);
     const order = await Order.findOneAndUpdate(
       { orderCode },
       { $set: updateData },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
 
     if (!order) {
@@ -419,7 +422,7 @@ console.log("orderCode",orderCode);
           "orderCustomAttributes.channelMetadata.status": newStatus,
           updatedAt: new Date(),
         },
-      }
+      },
     );
 
     return {
@@ -444,7 +447,7 @@ console.log("orderCode",orderCode);
       // Delete all associated items
       const deleteResult = await OrderItem.deleteMany(
         { orderCode },
-        { session }
+        { session },
       );
 
       await session.commitTransaction();
@@ -544,7 +547,7 @@ console.log("orderCode",orderCode);
       await Order.updateOne(
         { orderCode },
         { $inc: { itemCount: 1 } },
-        { session }
+        { session },
       );
 
       await session.commitTransaction();
@@ -568,7 +571,7 @@ console.log("orderCode",orderCode);
     try {
       const item = await OrderItem.findOneAndDelete(
         { orderCode, orderItemCode },
-        { session }
+        { session },
       );
 
       if (!item) {
@@ -579,7 +582,7 @@ console.log("orderCode",orderCode);
       await Order.updateOne(
         { orderCode },
         { $inc: { itemCount: -1 } },
-        { session }
+        { session },
       );
 
       await session.commitTransaction();

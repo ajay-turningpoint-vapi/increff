@@ -6,6 +6,7 @@ const morgan = require('morgan');
 const errorHandler = require('./middlewares/errorHandler');
 const ApiError = require('./utils/ApiError');
 const basicAuth = require('./middlewares/basicAuth');
+const bullBoard = require("./Queue/bullBoard");
 
 const app = express();
 
@@ -41,6 +42,8 @@ app.get('/health', (req, res) => {
   });
 });
 
+
+app.use("/admin/queues", bullBoard.getRouter());
 
 // Authentication middleware (applies to all routes below)
 app.use(basicAuth);

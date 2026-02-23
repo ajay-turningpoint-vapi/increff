@@ -5,14 +5,17 @@
   "main": "server.js",
   "scripts": {
     "dev:api": "nodemon src/server.js",
-    "dev:worker": "nodemon src/workers/inventory.worker.js",
-    "dev": "concurrently -k -n API,WORKER,OMS -c green,blue,yellow \"npm run dev:api\" \"npm run dev:worker\""
+    "dev:worker:inventory": "nodemon src/workers/inventory.worker.js",
+    "dev:worker:busy": "nodemon src/workers/mongo-to-busy.worker.js",
+    "dev": "concurrently -k -n API,INVENTORY,BUSY -c green,blue,yellow \"npm run dev:api\" \"npm run dev:worker:inventory\" \"npm run dev:worker:busy\""
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@bull-board/api": "^6.19.0",
+    "@bull-board/express": "^6.19.0",
     "axios": "^1.13.4",
     "bullmq": "^5.67.2",
     "compression": "^1.8.1",
@@ -27,7 +30,9 @@
     "moment-timezone": "^0.6.0",
     "mongoose": "^9.0.0",
     "morgan": "^1.10.1",
-    "multer": "^2.0.2"
+    "multer": "^2.0.2",
+    "nodemailer": "^8.0.1",
+    "pg": "^8.18.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.11"
