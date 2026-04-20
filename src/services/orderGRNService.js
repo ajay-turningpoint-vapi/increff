@@ -6,7 +6,6 @@ const ApiError = require("../utils/ApiError");
 const mongoose = require("mongoose");
 const { emitSyncEventBusy } = require("../utils/emitSyncEventBusy");
 
-
 class OrderService {
   //   async createOrder(orderData) {
   //   const session = await mongoose.startSession();

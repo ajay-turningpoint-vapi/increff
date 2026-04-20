@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OMS Inventory Sync</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #4f46e5;
+            --primary-hover: #4338ca;
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-color: #1f2937;
+            --text-muted: #6b7280;
+            --border-color: #e5e7eb;
+            --success-color: #10b981;
+            --error-color: #ef4444;
+            --warning-color: #f59e0b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.5;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            padding: 2rem;
+            transition: all 0.3s ease;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            font-size: 1.875rem;
+            font-weight: 700;
+            color: var(--text-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: var(--text-muted);
+            font-size: 0.975rem;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .form-group label {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .form-group input {
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+
+        .upload-area {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 3rem 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background-color: #fafafa;
+        }
+
+        .upload-area:hover, .upload-area.dragover {
+            border-color: var(--primary-color);
+            background-color: #f5f3ff;
+        }
+
+        .upload-area input[type="file"] {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            color: var(--primary-color);
+        }
+
+        .upload-text {
+            font-size: 1rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+
+        .upload-subtext {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        .file-info {
+            display: none;
+            margin-top: 1rem;
+            padding: 1rem;
+            background-color: #f8fafc;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            align-items: center;
+            justify-content: space-between;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .file-info.visible {
+            display: flex;
+        }
+
+        .file-details {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .file-name {
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+
+        .file-size {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .remove-file {
+            color: var(--error-color);
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            background: none;
+            border: none;
+        }
+
+        .remove-file:hover {
+            text-decoration: underline;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.75rem 1.5rem;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            width: 100%;
+            margin-top: 1.5rem;
+        }
+
+        .btn:hover:not(:disabled) {
+            background-color: var(--primary-hover);
+        }
+
+        .btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .btn.loading .loader {
+            display: inline-block;
+        }
+        .btn.loading .btn-text {
+            display: none;
+        }
+
+        .loader {
+            display: none;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top: 3px solid white;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Preview styles */
+        .preview-section {
+            display: none;
+            margin-top: 2rem;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .preview-section.visible {
+            display: block;
+        }
+
+        .preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .preview-header h3 {
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+
+        .table-responsive {
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background-color: #f9fafb;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Status & Progress */
+        .status-section {
+            display: none;
+            margin-top: 2rem;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .status-section.visible {
+            display: block;
+        }
+
+        .progress-container {
+            width: 100%;
+            background-color: var(--border-color);
+            border-radius: 9999px;
+            height: 8px;
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            background-color: var(--primary-color);
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .status-stats {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-box {
+            text-align: center;
+            padding: 1rem;
+            background-color: #f8fafc;
+            border-radius: 8px;
+            flex: 1;
+            margin: 0 0.5rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .stat-box:first-child { margin-left: 0; }
+        .stat-box:last-child { margin-right: 0; }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-color);
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-top: 0.25rem;
+        }
+
+        .stat-success .stat-value { color: var(--success-color); }
+        .stat-error .stat-value { color: var(--error-color); }
+        .stat-pending .stat-value { color: var(--warning-color); }
+
+        .job-status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-IN_PROGRESS { background-color: #fef3c7; color: #b45309; }
+        .status-COMPLETED { background-color: #d1fae5; color: #047857; }
+        .status-COMPLETED_WITH_ERRORS { background-color: #fee2e2; color: #b91c1c; }
+
+        .log-area {
+            background-color: #1e293b;
+            color: #e2e8f0;
+            padding: 1rem;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.875rem;
+            height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin-top: 1.5rem;
+        }
+
+        .log-entry { margin-bottom: 0.25rem; }
+        .log-entry.error { color: #f87171; }
+        .log-entry.success { color: #4ade80; }
+        .log-entry.info { color: #60a5fa; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Upload Card -->
+        <div class="card" id="uploadCard">
+            <div class="header">
+                <h1>OMS Inventory Sync</h1>
+                <p>Upload your Excel file to mass update inventory to the OMS service.</p>
+            </div>
+
+            <div class="grid-2">
+                <div class="form-group">
+                    <label for="username">API Username</label>
+                    <input type="text" id="username" placeholder="Username" value="increff_service">
+                </div>
+                <div class="form-group">
+                    <label for="password">API Password</label>
+                    <input type="password" id="password" placeholder="Password" value="0yVQmrFy9ppQLVPUQG8AOG3BGt">
+                </div>
+            </div>
+
+            <div class="upload-area" id="dropZone">
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">Click to upload or drag and drop</div>
+                <div class="upload-subtext">Excel files (.xlsx, .xls) up to 10MB</div>
+                <input type="file" id="fileInput" accept=".xlsx, .xls">
+            </div>
+
+            <div class="file-info" id="fileInfo">
+                <div class="file-details">
+                    <span class="file-name" id="fileName">data.xlsx</span>
+                    <span class="file-size" id="fileSize">24 KB</span>
+                </div>
+                <button class="remove-file" id="removeFile">Remove</button>
+            </div>
+
+            <!-- Preview Data -->
+            <div class="preview-section" id="previewSection">
+                <div class="preview-header">
+                    <h3>Data Preview (First 5 Rows)</h3>
+                    <span id="totalRowsBadge" class="job-status-badge status-IN_PROGRESS" style="background-color:#e0e7ff;color:#3730a3">Loading...</span>
+                </div>
+                <div class="table-responsive">
+                    <table id="previewTable">
+                        <thead>
+                            <tr>
+                                <th>Channel SKU Code</th>
+                                <th>Location Code</th>
+                                <th>Quantity</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Rows injected here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <button class="btn" id="uploadBtn" disabled>
+                <span class="btn-text">Start Upload & Sync</span>
+                <span class="loader"></span>
+            </button>
+        </div>
+
+        <!-- Status Card -->
+        <div class="card status-section" id="statusCard">
+            <div class="header" style="margin-bottom: 1.5rem;">
+                <h2>Processing Status</h2>
+                <div style="margin-top: 0.5rem;">
+                    Job ID: <strong id="jobIdText">...</strong> 
+                    <span id="jobStatusBadge" class="job-status-badge status-IN_PROGRESS" style="margin-left: 0.5rem;">Starting...</span>
+                </div>
+            </div>
+
+            <div class="progress-container">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+
+            <div class="status-stats">
+                <div class="stat-box">
+                    <div class="stat-value" id="statProcessed">0</div>
+                    <div class="stat-label">Processed</div>
+                </div>
+                <div class="stat-box stat-success">
+                    <div class="stat-value" id="statSuccess">0</div>
+                    <div class="stat-label">Success</div>
+                </div>
+                <div class="stat-box stat-error">
+                    <div class="stat-value" id="statFailed">0</div>
+                    <div class="stat-label">Failed</div>
+                </div>
+            </div>
+
+            <button class="btn" id="newUploadBtn" style="background-color: var(--text-color); display: none;">Start New Upload</button>
+
+            <div class="log-area" id="logArea"></div>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const removeFile = document.getElementById('removeFile');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const previewSection = document.getElementById('previewSection');
+        const previewTableBody = document.querySelector('#previewTable tbody');
+        const totalRowsBadge = document.getElementById('totalRowsBadge');
+        
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+
+        const uploadCard = document.getElementById('uploadCard');
+        const statusCard = document.getElementById('statusCard');
+        const progressBar = document.getElementById('progressBar');
+        const statProcessed = document.getElementById('statProcessed');
+        const statSuccess = document.getElementById('statSuccess');
+        const statFailed = document.getElementById('statFailed');
+        const jobIdText = document.getElementById('jobIdText');
+        const jobStatusBadge = document.getElementById('jobStatusBadge');
+        const logArea = document.getElementById('logArea');
+        const newUploadBtn = document.getElementById('newUploadBtn');
+
+        let currentFile = null;
+        let pollingInterval = null;
+
+        const API_BASE_URL = window.location.origin.includes('5002') ? '/api/v1' : 'http://localhost:5002/api/v1';
+
+        // Event Listeners for Drag & Drop
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+        });
+
+        dropZone.addEventListener('drop', handleDrop, false);
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', handleFileSelect);
+        removeFile.addEventListener('click', resetSelection);
+        uploadBtn.addEventListener('click', handleUpload);
+        newUploadBtn.addEventListener('click', resetAll);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles(files);
+        }
+
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            handleFiles(files);
+        }
+
+        function handleFiles(files) {
+            if (files.length === 0) return;
+            const file = files[0];
+            
+            if (!file.name.match(/\.(xlsx|xls)$/)) {
+                alert('Please upload a valid Excel file (.xlsx, .xls)');
+                return;
+            }
+
+            currentFile = file;
+            fileName.textContent = file.name;
+            fileSize.textContent = formatBytes(file.size);
+            
+            dropZone.style.display = 'none';
+            fileInfo.classList.add('visible');
+            uploadBtn.disabled = false;
+
+            readExcelPreview(file);
+        }
+
+        function resetSelection(e) {
+            if(e) e.stopPropagation();
+            currentFile = null;
+            fileInput.value = '';
+            dropZone.style.display = 'block';
+            fileInfo.classList.remove('visible');
+            uploadBtn.disabled = true;
+            previewSection.classList.remove('visible');
+        }
+
+        function resetAll() {
+            resetSelection();
+            statusCard.classList.remove('visible');
+            uploadCard.style.display = 'block';
+            progressBar.style.width = '0%';
+            logArea.innerHTML = '';
+            newUploadBtn.style.display = 'none';
+        }
+
+        function formatBytes(bytes, decimals = 2) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
+
+        // --- SheetJS Preview ---
+        function readExcelPreview(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                
+                // Convert to JSON
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                
+                if (jsonData.length < 2) {
+                    alert('Excel file is empty or missing data rows.');
+                    resetSelection();
+                    return;
+                }
+
+                // Try to find headers
+                const headers = jsonData[0].map(h => String(h || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
+                const skuCol = headers.indexOf('channelskucode');
+                const locCol = headers.indexOf('locationcode');
+                const qtyCol = headers.indexOf('quantity');
+
+                if (skuCol === -1 || locCol === -1 || qtyCol === -1) {
+                    alert('Invalid Excel format. Required headers: channelSkuCode, locationCode, quantity');
+                    resetSelection();
+                    return;
+                }
+
+                // Show total rows (excluding header)
+                const totalRows = jsonData.length - 1;
+                totalRowsBadge.textContent = `${totalRows} Rows Found`;
+
+                // Render first 5 rows
+                previewTableBody.innerHTML = '';
+                const previewData = jsonData.slice(1, 6);
+                
+                previewData.forEach(row => {
+                    const tr = document.createElement('tr');
+                    const sku = row[skuCol] || '';
+                    const loc = row[locCol] || '';
+                    const qty = row[qtyCol] !== undefined ? row[qtyCol] : '';
+                    
+                    tr.innerHTML = `
+                        <td>${sku}</td>
+                        <td>${loc}</td>
+                        <td>${qty}</td>
+                    `;
+                    previewTableBody.appendChild(tr);
+                });
+
+                if (previewData.length < totalRows) {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td colspan="3" style="text-align: center; color: var(--text-muted); font-style: italic;">... and ${totalRows - previewData.length} more rows</td>`;
+                    previewTableBody.appendChild(tr);
+                }
+
+                previewSection.classList.add('visible');
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // --- Upload & Polling ---
+        function addLog(msg, type = 'info') {
+            const time = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.className = `log-entry ${type}`;
+            div.textContent = `[${time}] ${msg}`;
+            logArea.appendChild(div);
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        async function handleUpload() {
+            if (!currentFile) return;
+
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value.trim();
+
+            if (!username || !password) {
+                alert('Please provide API credentials.');
+                return;
+            }
+
+            uploadBtn.classList.add('loading');
+            uploadBtn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('file', currentFile);
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/skus-quantity-update-store/upload`, {
+                    method: 'POST',
+                    headers: {
+                        'x-username': username,
+                        'x-password': password
+                    },
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.message || 'Upload failed');
+                }
+
+                // Transition to status card
+                uploadCard.style.display = 'none';
+                statusCard.classList.add('visible');
+                jobIdText.textContent = data.jobId;
+                
+                addLog(`File uploaded successfully. Job ID: ${data.jobId}`, 'success');
+                addLog(`Total rows detected by server: ${data.totalRows}`, 'info');
+
+                startPolling(data.jobId, username, password, data.totalRows || 1);
+
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+                uploadBtn.classList.remove('loading');
+                uploadBtn.disabled = false;
+            }
+        }
+
+        function startPolling(jobId, username, password, totalRowsExpected) {
+            if (pollingInterval) clearInterval(pollingInterval);
+
+            pollingInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/jobs/${jobId}`, {
+                        headers: {
+                            'x-username': username,
+                            'x-password': password
+                        }
+                    });
+
+                    if (!response.ok) throw new Error('Failed to fetch job status');
+
+                    const job = await response.json();
+
+                    // Update UI
+                    statProcessed.textContent = job.processedRows || 0;
+                    statSuccess.textContent = job.successRows || 0;
+                    statFailed.textContent = job.failedRows || 0;
+
+                    const total = job.totalRows || totalRowsExpected;
+                    const processed = job.processedRows || 0;
+                    const progressPercent = total > 0 ? Math.min(100, (processed / total) * 100) : 0;
+                    
+                    progressBar.style.width = `${progressPercent}%`;
+
+                    // Update Badge
+                    const status = job.status || 'IN_PROGRESS';
+                    jobStatusBadge.textContent = status.replace(/_/g, ' ');
+                    jobStatusBadge.className = `job-status-badge status-${status}`;
+
+                    if (processed > 0) {
+                        addLog(`Progress: ${processed}/${total} rows processed...`, 'info');
+                    }
+
+                    if (status === 'COMPLETED' || status === 'COMPLETED_WITH_ERRORS' || status === 'FAILED') {
+                        clearInterval(pollingInterval);
+                        uploadBtn.classList.remove('loading');
+                        uploadBtn.disabled = false;
+                        newUploadBtn.style.display = 'inline-flex';
+
+                        if (status === 'COMPLETED') {
+                            addLog(`Job completed successfully! All rows synced.`, 'success');
+                            progressBar.style.backgroundColor = 'var(--success-color)';
+                        } else if (status === 'COMPLETED_WITH_ERRORS') {
+                            addLog(`Job completed with some errors. ${job.failedRows} rows failed.`, 'error');
+                            progressBar.style.backgroundColor = 'var(--warning-color)';
+                            fetchFailures(jobId, username, password);
+                        } else {
+                            addLog(`Job failed!`, 'error');
+                            progressBar.style.backgroundColor = 'var(--error-color)';
+                        }
+                    }
+
+                } catch (err) {
+                    addLog(`Error polling status: ${err.message}`, 'error');
+                }
+            }, 2000);
+        }
+
+        async function fetchFailures(jobId, username, password) {
+            try {
+                addLog('Fetching error details...', 'info');
+                const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/failures`, {
+                    headers: {
+                        'x-username': username,
+                        'x-password': password
+                    }
+                });
+                if (!res.ok) return;
+                
+                const failures = await res.json();
+                if (failures && failures.length > 0) {
+                    addLog(`--- Error Report ---`, 'error');
+                    failures.forEach(f => {
+                        addLog(`Batch ${f.batchId}: ${f.errorMessage || 'Unknown error'}`, 'error');
+                        if (f.details) {
+                            addLog(JSON.stringify(f.details), 'error');
+                        }
+                    });
+                }
+            } catch(e) {
+                // Ignore failure fetch errors
+            }
+        }
+    </script>
+</body>
+</html>

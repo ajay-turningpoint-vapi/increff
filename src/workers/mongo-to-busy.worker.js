@@ -1,6 +1,12 @@
 const { Worker } = require("bullmq");
 const connection = require("../config/redis");
-const { sendVoucherToBusy } = require("../services/busy.service");
+const {
+  sendVoucherToBusy,
+  sendInwardOrderToBusy,
+  sendOutwardOrderToBusy,
+  sendPackOrderToBusy
+} = require("../services/busy.service");
+
 
 const worker = new Worker(
   "mongo-to-busy",
@@ -11,9 +17,23 @@ const worker = new Worker(
       await sendVoucherToBusy(job.data.payload);
     }
 
+    if (job.data.event === "INWARD_CREATED") {
+      await sendInwardOrderToBusy(job.data.payload);
+    }
+
+    if (job.data.event === "OUTWARD_CREATED") {
+      await sendOutwardOrderToBusy(
+        job.data.payload,
+      );
+    }
+
+    if (job.data.event === "PACKORDER_CREATED") {
+      await sendPackOrderToBusy(job.data.payload);
+    }
+
     console.log("🟢 Job done:", job.id);
   },
-  { connection, concurrency: 5 }
+  { connection, concurrency: 5 },
 );
 
 worker.on("completed", (job) => {

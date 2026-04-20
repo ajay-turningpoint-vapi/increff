@@ -1,129 +1,114 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
-// ---------- Sub-schemas ----------
-
-// Tax breakup
-const taxItemFormSchema = new Schema({
-  type: { type: String, required: true },          // e.g. VAT, GST
-  rate: { type: Number, required: true },          // tax %
-  taxPerUnit: { type: Number, required: true }     // per unit tax
+const AddressSchema = new Schema({
+  name: { type: String, required: true },
+  line1: { type: String, required: true },
+  line2: String,
+  line3: String,
+  city: { type: String, required: true },
+  state: { type: String, required: true },
+  zip: { type: String, required: true },
+  country: { type: String, required: true },
+  email: String,
+  phone: String
 }, { _id: false });
 
-const taxBreakupFormSchema = new Schema({
-  channelSkuId: { type: String, required: true },
+const TaxItemSchema = new Schema({
+  type: { type: String, required: true },
+  rate: { type: Number, required: true },
+  taxPerUnit: { type: Number, required: true },
+  taxTotal: { type: Number, required: true }
+}, { _id: false });
+
+const ShipmentItemSchema = new Schema({
+  channelSkuCode: { type: String, required: true },
+  locationCode: { type: String, required: true },
+  orderItemCode: { type: String, required: true },
+  netTaxAmountPerUnit: { type: Number, required: true },
+  netTaxAmountTotal: { type: Number, required: true },
   baseSellingPricePerUnit: { type: Number, required: true },
-  taxItemForms: {
-    type: [taxItemFormSchema],
-    validate: {
-      validator: v => Array.isArray(v) && v.length > 0,
-      message: 'taxItemForms must be a non-empty array'
-    }
-  }
+  baseSellingPriceTotal: { type: Number, required: true },
+  sellingPricePerUnit: { type: Number, required: true },
+  sellingPriceTotal: { type: Number, required: true },
+  quantity: { type: Number, required: true },
+  shippingChargePerUnit: Number,
+  channelDiscount: Number,
+  barcode: String,
+  clientSkuCode: String,
+  taxItems: [TaxItemSchema]
 }, { _id: false });
 
-// Channel metadata embedded in orderCustomAttributes
-const channelMetadataSchema = new Schema({
-  totalCashOnDeliveryFee: { type: Number, default: 0 },
-  department: { type: String, trim: true },
-  paymentMethod: { type: String, trim: true },
-  status: {
-    type: String,
-    enum: ['processing', 'completed', 'failed', 'pending'],
-    default: 'processing'
-  }
+const ShipmentSchema = new Schema({
+  shipmentCode: { type: String, required: true },
+  omsShipmentId: String,
+  locationCode: String,
+  generatedInvoiceId: String,
+  generatedInvoiceDate: Date,
+  externalInvoiceId: String,
+  externalInvoiceDate: Date,
+  invoiceDocumentUrl: String,
+  shippingLabelDocumentUrl: String,
+  irn: String,
+  qrCode: String,
+  shipmentStatus: { type: String, required: true },
+  awbNumber: String,
+  transporter: String,
+  packageSku: String,
+  deliveredAt: Date,
+  packedAt: Date,
+  shipmentItems: [ShipmentItemSchema],
+  shipmentDetails: Schema.Types.Mixed // Using Mixed for flexibility on the deep packbox nesting
 }, { _id: false });
 
-const orderCustomAttributesSchema = new Schema({
-  attribute1: String,
-  attribute2: String,
-  attribute3: String,
-  attribute4: String,
-  attribute5: String,
-  attribute6: String,
-  attribute7: String,
-  attribute8: String,
-  attribute9: String,
-  attribute10: String,
-  channelMeta :channelMetadataSchema,
-  currency: { type: String, default: 'INR' }
-}, { _id: false, strict: false });
+const OrderItemSchema = new Schema({
+  orderItemCode: { type: String, required: true },
+  channelSkuCode: { type: String, required: true },
+  orderedQuantity: { type: Number, required: true },
+  cancelledQuantity: { type: Number, required: true },
+  customerCancelledQty: Number,
+  sellerCancelledQty: Number,
+  sellerRejectQty: Number,
+  channelDiscount: Number,
+  sellingPricePerUnit: { type: Number, required: true },
+  giftChargePerUnit: Number,
+  sellerDiscount: Number,
+  shippingCharge: Number,
+  omsItemId: Number,
+  barcode: { type: String, required: true },
+  clientSkuCode: String,
+  orderItemCustomAttributes: Schema.Types.Mixed
+}, { _id: false });
 
-// ---------- Main outward order schema ----------
-
-const outwardOrderSchema = new Schema({
-  parentOrderCode: { type: String, trim: true },
-  locationCode: { type: String, trim: true },          // optional if split is done by OMS
-  inventoryPool: { type: String, trim: true },
-  orderCode: {
-    type: String,
-    required: true,
-    unique: true,
-    index: true,
-    trim: true
-  },
+const OutwardOrderSchema = new Schema({
+  partnerCode: { type: String, required: true },
+  partnerLocationCode: { type: String, required: true },
+  locationCode: { type: String, required: true },
+  orderCode: { type: String, required: true },
+  parentOrderCode: String,
+  isPriority: { type: Boolean, required: true },
+  channelName: { type: String, required: true },
   orderTime: { type: Date, required: true },
-  orderType: {
-    type: String,
-    required: true,
-    enum: ['SO', 'STO', 'RTV', 'CRD']                  // as per spec
-  },
-  partnerCode: {
-    type: String,
-    required: true,
-    trim: true,
-    index: true
-  },
-  partnerLocationCode: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  onHold: { type: Boolean, required: true, default: false },
-  dispatchByTime: { type: Date, required: true },
-  startProcessingTime: { type: Date, required: true },
-  paymentMethod: {
-    type: String,
-    required: true,
-    enum: ['COD', 'NCOD']
-  },
-  isSplitRequired: { type: Boolean, required: true, default: false },
+  orderType: { type: String, required: true },
+  messageId: { type: Number, required: true, unique: true }, // Unique index for Idempotency
+  paymentMethod: { type: String, required: true },
+  eventType: { type: String, required: true },
+  eventTime: { type: Date, required: true },
+  omsOrderId: Number,
+  turnAroundTime: Date,
+  virtualSkuDefinitions: [Schema.Types.Mixed],
+  bundledSkuDefinitions: [Schema.Types.Mixed],
+  isSplitRequired: { type: Boolean, required: true },
+  shippingCharges: Number,
+  channelType: String,
+  orderItems: [OrderItemSchema],
+  shipments: [ShipmentSchema],
+  shippingAddress: AddressSchema,
+  billingAddress: AddressSchema,
+  orderCustomAttributes: Schema.Types.Mixed
+}, { timestamps: true });
 
-  taxBreakupForms: {
-    type: [taxBreakupFormSchema],
-    default: []
-  },
+// Compound index to help query by order and shipment quickly if needed for future updates
+OutwardOrderSchema.index({ orderCode: 1, 'shipments.shipmentCode': 1 });
 
-  packType: {
-    type: String,
-    enum: ['PIECE', 'BULK'],
-    default: 'PIECE'
-  },
-
-  qcStatus: {
-    type: String,
-    enum: ['PASS', 'FAIL'],
-    default: 'PASS',
-    required: true
-  },
-
-  orderCustomAttributes: {
-    type: orderCustomAttributesSchema,
-    default: null
-  },
-
-  itemCount: {
-    type: Number,
-    default: 0,
-    min: 0
-  }
-}, {
-  timestamps: true,
-  collection: 'outward_orders'
-});
-
-// Helpful indexes
-outwardOrderSchema.index({ partnerCode: 1, orderTime: -1 });
-outwardOrderSchema.index({ locationCode: 1, orderTime: -1 });
-
-module.exports = mongoose.model('OutwardOrder', outwardOrderSchema);
+module.exports = mongoose.model('OutwardOrder', OutwardOrderSchema);

@@ -14,7 +14,7 @@ const server = app.listen(PORT, () => {
   ║   🚀 Server is running!              ║
   ║   📡 Port: ${PORT}                   ║
   ║   🌍 Environment: ${process.env.NODE_ENV}   ║
-  ║   📝 API: http://localhost:${PORT}/api/v1 ║
+  ║   📝 API: http://192.168.1.133:${PORT}/api/v1 ║
   ╚═══════════════════════════════════════╝
   `);
 });

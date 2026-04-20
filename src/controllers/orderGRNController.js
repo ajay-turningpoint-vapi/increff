@@ -1,7 +1,8 @@
 const orderService = require("../services/orderGRNService");
 const ApiResponse = require("../utils/ApiResponse");
 const asyncHandler = require("../middlewares/asyncHandler");
-const moment = require('moment-timezone');
+const moment = require("moment-timezone");
+const { sendVoucherToBusy } = require("../services/busy.service");
 // Create order
 exports.createOrder = asyncHandler(async (req, res) => {
   const order = await orderService.createOrder(req.body);
@@ -21,8 +22,8 @@ exports.bulkCreateOrders = asyncHandler(async (req, res) => {
         new ApiResponse(
           400,
           null,
-          "orders array is required and must not be empty"
-        )
+          "orders array is required and must not be empty",
+        ),
       );
   }
 
@@ -33,27 +34,43 @@ exports.bulkCreateOrders = asyncHandler(async (req, res) => {
       new ApiResponse(
         201,
         result,
-        `${result.length} orders created successfully`
-      )
+        `${result.length} orders created successfully`,
+      ),
     );
 });
 
 // Get order by code
 exports.getOrder = asyncHandler(async (req, res) => {
-  const { orderCode,includeItems = "true" } = req.query;
+  const { orderCode, includeItems = "true" } = req.query;
   const order = await orderService.getOrderByCode(
-   orderCode,
-    includeItems === "true"
+    orderCode,
+    includeItems === "true",
   );
   res
     .status(200)
     .json(new ApiResponse(200, order, "Order retrieved successfully"));
 });
 
+// Manually resend an order to BUSY by orderCode
+exports.syncOrderToBusy = asyncHandler(async (req, res) => {
+  const { orderCode } = req.params;
+
+  const order = await orderService.getOrderByCode(orderCode, true);
+  const payload = {
+    order,
+    items: order.items || [],
+  };
+
+  const busyResult = await sendVoucherToBusy(payload);
+
+  res.status(200).json(
+    new ApiResponse(200, { order, busyResult }, "Order synced to BUSY"),
+  );
+});
+
 exports.getOrderByQuery = asyncHandler(async (req, res) => {
   const { orderCode, includeItems = "true" } = req.query;
-  console.log("query",req.query);
-  
+  console.log("query", req.query);
 
   if (!orderCode) {
     return res
@@ -63,14 +80,13 @@ exports.getOrderByQuery = asyncHandler(async (req, res) => {
 
   const order = await orderService.getOrderByCode(
     orderCode,
-    includeItems === "true"
+    includeItems === "true",
   );
 
   res
     .status(200)
     .json(new ApiResponse(200, order, "Order retrieved successfully"));
 });
-
 
 // Get order by date
 exports.getOrderByDate = asyncHandler(async (req, res) => {
@@ -107,7 +123,7 @@ exports.getOrderItems = asyncHandler(async (req, res) => {
   const result = await orderService.getOrderItems(
     orderCode,
     parseInt(page),
-    parseInt(limit)
+    parseInt(limit),
   );
 
   res
@@ -135,7 +151,7 @@ exports.getAllOrders = asyncHandler(async (req, res) => {
     parseInt(page),
     parseInt(limit),
     filters,
-    includeItems === "true"
+    includeItems === "true",
   );
 
   res
@@ -151,13 +167,13 @@ exports.getOrdersByPartner = asyncHandler(async (req, res) => {
   const result = await orderService.getOrdersByPartner(
     partnerCode,
     parseInt(page),
-    parseInt(limit)
+    parseInt(limit),
   );
 
   res
     .status(200)
     .json(
-      new ApiResponse(200, result, "Partner orders retrieved successfully")
+      new ApiResponse(200, result, "Partner orders retrieved successfully"),
     );
 });
 
@@ -169,7 +185,7 @@ exports.getOrdersBySku = asyncHandler(async (req, res) => {
   const result = await orderService.getOrdersBySku(
     skuCode,
     parseInt(page),
-    parseInt(limit)
+    parseInt(limit),
   );
 
   res
@@ -192,7 +208,7 @@ exports.updateOrderItem = asyncHandler(async (req, res) => {
   const item = await orderService.updateOrderItem(
     orderCode,
     orderItemCode,
-    req.body
+    req.body,
   );
   res
     .status(200)
@@ -245,8 +261,8 @@ exports.bulkUpdateStatus = asyncHandler(async (req, res) => {
         new ApiResponse(
           400,
           null,
-          "orderCodes array is required and must not be empty"
-        )
+          "orderCodes array is required and must not be empty",
+        ),
       );
   }
 
@@ -260,7 +276,7 @@ exports.bulkUpdateStatus = asyncHandler(async (req, res) => {
   res
     .status(200)
     .json(
-      new ApiResponse(200, result, `${result.modifiedCount} orders updated`)
+      new ApiResponse(200, result, `${result.modifiedCount} orders updated`),
     );
 });
 
@@ -280,6 +296,6 @@ exports.getOrderStats = asyncHandler(async (req, res) => {
   res
     .status(200)
     .json(
-      new ApiResponse(200, stats, "Order statistics retrieved successfully")
+      new ApiResponse(200, stats, "Order statistics retrieved successfully"),
     );
 });

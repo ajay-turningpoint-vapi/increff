@@ -35,10 +35,10 @@ if (process.env.NODE_ENV === 'development') {
 
 // Health check
 app.get('/health', (req, res) => {
-  res.status(200).json({ 
+  res.status(200).json({
     status: 'OK',
     environment: process.env.NODE_ENV,
-    timestamp: new Date().toISOString() 
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -46,15 +46,18 @@ app.get('/health', (req, res) => {
 app.use("/admin/queues", bullBoard.getRouter());
 
 // Authentication middleware (applies to all routes below)
-app.use(basicAuth);
+// app.use(basicAuth);
 
 // API routes
 app.use('/api/v1/grn-orders', require('./routes/orderGRNRoutes'));
 app.use('/api/v1/invoices', require('./routes/invoiceRoutes'));
-app.use('/api/v1/outwards', require('./routes/outwardOrderRoutes'));
+app.use('/api/v1/sales/outward', require('./routes/outwardOrderRoutes'));
 app.use('/api/v1/jobs', require('./routes/jobRoutes'));
-app.use('/api/v1/skus', require('./routes/skuRoutes'));
-
+app.use('/api/v1/skus-quantity-update-store', require('./routes/skuRoutes'));
+app.use('/api/v1/inward', require('./routes/inwardOrder.route'));
+app.use('/api/v1/pack-order', require('./routes/packOrderRoutes'));
+app.use('/api/v1/packed-order-invoice', require('./routes/packedOrderInvoiceRoutes'));
+app.use('/parse-invoice', require('./routes/messageRoutes'));
 
 
 // 404 handler
